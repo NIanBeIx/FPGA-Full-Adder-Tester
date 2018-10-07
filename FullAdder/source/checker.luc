@@ -1,0 +1,13 @@
+module checker (
+    output value[2],
+    input sum,
+    input carry
+  ) {
+  var z;
+
+  always {
+    z=2b00;
+    z=c{carry,sum};
+    value=z;
+  }
+}

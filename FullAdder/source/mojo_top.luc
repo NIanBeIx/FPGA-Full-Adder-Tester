@@ -1,0 +1,118 @@
+module mojo_top (
+    input clk,              // 50MHz clock
+    input rst_n,            // reset button (active low)
+    output led [8],         // 8 user controllable LEDs
+    input cclk,             // configuration clock, AVR ready when high
+    output spi_miso,        // AVR SPI MISO
+    input spi_ss,           // AVR SPI Slave Select
+    input spi_mosi,         // AVR SPI MOSI
+    input spi_sck,          // AVR SPI Clock
+    output spi_channel [4], // AVR general purpose pins (used by default to select ADC channel)
+    input avr_tx,           // AVR TX (FPGA RX)
+    output avr_rx,          // AVR RX (FPGA TX)
+    input avr_rx_busy,      // AVR RX buffer full
+    output io_led [3][8],   // LEDs on IO Shield
+    output io_seg [8],      // 7-segment LEDs on IO Shield
+    output io_sel [4],      // Digit select on IO Shield
+    input io_button [5],    // 5 buttons on IO Shield
+    input io_dip [3][8],     // DIP switches on IO Shield
+    output a,
+    output b,
+    output c,
+    input sum,
+    input carry
+  ) {
+  var exp;
+  sig rst;                  // reset signal
+  
+  checker faChecker;
+  
+  .clk(clk) {
+    // The reset conditioner is used to synchronize the reset signal to the FPGA
+    // clock. This ensures the entire FPGA comes out of reset at the same time.
+    reset_conditioner reset_cond;
+    
+    .rst(rst){
+    blinker faBlinker;      //create Blink with FSM to indicate errors detected in the states
+      fsm state(#INIT(AUTO))={AUTO,MANUAL};
+    }
+  }
+  
+  always {
+    reset_cond.in = ~rst_n; // input raw inverted reset signal
+    rst = reset_cond.out;   // conditioned reset
+    
+    led = 8h00;             // turn LEDs off
+    spi_miso = bz;          // not using SPI
+    spi_channel = bzzzz;    // not using flags
+    avr_rx = bz;            // not using serial port
+    
+    io_led=3x{{8b00}};      //turn off LEDs
+    io_seg=8hff;
+    io_sel=4hf;
+    a=0;
+    b=0;
+    c=0;
+    exp=2b00;
+    faChecker.sum=sum;
+    faChecker.carry=carry;
+    case(state.q){
+      state.AUTO:
+        io_led[2][0]=0;
+        io_led[2][1]=0;
+        io_led[2][7]=faBlinker.blinkA;
+        io_led[2][6]=faBlinker.blinkB;
+        io_led[2][5]=faBlinker.blinkC;
+        a=faBlinker.blinkA;
+        b=faBlinker.blinkB;
+        c=faBlinker.blinkC;
+        io_led[0][7]=faChecker.value[1];
+        io_led[0][6]=faChecker.value[0];
+        exp=faBlinker.blinkA+faBlinker.blinkB+faBlinker.blinkC;
+        io_led[1]=c{exp,6b000000};
+        if(faChecker.value==exp){
+          io_led[0][0]=0;      //if the values detected are same as the values expected, LED on
+          io_led[0][1]=0;      //if the values detected are same as the values expected, LED on
+            
+        }
+        else{
+          io_led[0][0]=1;     //if the values detected are not same as the values expected, LED off
+          io_led[0][1]=1;     //if the values detected are not same as the values expected, LED off
+        }
+        if(io_dip[2][0]){     //if this LED is on: goes to Manual check mode
+          state.d=state.MANUAL;
+        }
+      state.MANUAL:
+        io_led[2][0]=1;        //detected output LED is off
+        io_led[2][1]=1;        //detected output LED is off
+        
+        io_led[2][7]=io_dip[2][7];     //input collected from switch goes to LED that represents input A
+        io_led[2][6]=io_dip[2][6];     //input collected from switch goes to LED that represents input B
+        io_led[2][5]=io_dip[2][5];     //input collected from switch goes to LED that represents input C
+        
+        a=io_dip[2][7];   //signal collected from switch
+        b=io_dip[2][6];   //signal collected from switch
+        c=io_dip[2][5];   //signal collected from switch
+        
+        io_led[0][7]=faChecker.value[1];    
+        io_led[0][6]=faChecker.value[0];
+        exp=io_dip[2][7]+io_dip[2][6]+io_dip[2][5];
+        io_led[1]=c{exp,6b000000};
+        if(faChecker.value==exp){
+          io_led[0][0]=0;     //if the values detected are same as the values expected, LED on
+          io_led[0][1]=0;     //if the values detected are same as the values expected, LED on
+        }else{
+          io_led[0][0]=1;     //if the values detected are not same as the values expected, LED off
+          io_led[0][1]=1;     //if the values detected are not same as the values expected, LED off
+        }
+        
+        if(!io_dip[2][0]){     //if this LED is off: goes to AUTO check mode
+          state.d=state.AUTO;
+        }
+    }
+    led = 8h00;             // turn LEDs off
+    spi_miso = bz;          // not using SPI
+    spi_channel = bzzzz;    // not using flags
+    avr_rx = bz;            // not using serial port
+  }
+}
